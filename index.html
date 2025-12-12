@@ -197,7 +197,9 @@ function renderTabela(divId, sheetName) {
         html += `<tr class="${classe}">`;
 
         r.forEach((cell, idx) => {
-          const somenteHora = (sheetName === "AGENDA DO DIA" && cols[idx].toLowerCase().includes("hora"));
+          const somenteHora =
+            (sheetName === "AGENDA DO DIA"  || sheetName === "PAINEL") &&
+            cols[idx].toLowerCase().includes("hora"));
           const valor = formatCell(cell, somenteHora);
           html += `<td>${escapeHtml(valor)}</td>`;
         });
