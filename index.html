@@ -1,148 +1,194 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
-<meta charset="UTF-8">
-<title>Visualização de Planilha</title>
+<meta charset="UTF-8" />
+<meta http-equiv="refresh" content="60"> <!-- Atualiza a página a cada 60s -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel Integrado</title>
+
 <style>
   body {
     font-family: Arial, sans-serif;
-    padding: 20px;
-    background: #f5f5f5;
+    background: #111;
+    color: #fff;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1 {
+    text-align: center;
+    margin-top: 20px;
+    color: #00eaff;
+  }
+
+  .logo {
+    width: 180px;
+    display: block;
+    margin: 20px auto;
   }
 
   table {
-    width: 100%;
+    width: 95%;
+    margin: 20px auto;
     border-collapse: collapse;
-    margin-bottom: 40px;
-    background: white;
-  }
-
-  th, td {
-    border: 1px solid #ccc;
-    padding: 6px 10px;
-    text-align: left;
+    font-size: 20px;
   }
 
   th {
-    background: #eee;
+    background: #004d73;
+    padding: 10px;
   }
 
-  /* ===== Estilo para LINHA CANCELADA ===== */
-  .cancelado {
-    background: #ffb3b3 !important;
-    animation: piscar 1s infinite;
+  td {
+    padding: 8px;
+    border-bottom: 1px solid #333;
   }
 
-  @keyframes piscar {
-    0% { background: #ffb3b3; }
-    50% { background: #ffffff; }
-    100% { background: #ffb3b3; }
+  tr.cancelado {
+    background: #7a0000 !important;
+    color: #fff;
+    animation: blink 1.2s infinite;
+  }
+
+  @keyframes blink {
+    0% { opacity: 1; }
+    40% { opacity: .2; }
+    100% { opacity: 1; }
   }
 </style>
 </head>
+
 <body>
 
-<h2 id="titulo"></h2>
-<div id="conteudo"></div>
+<img src="logo.png" class="logo">
+
+<h1>PAINEL</h1>
+<table id="PAINEL"></table>
+
+<h1>AGENDA DO DIA</h1>
+<table id="AGENDA_DO_DIA"></table>
+
+<h1>AGENDA SERVIÇO SOCIAL</h1>
+<table id="AGENDA_SERVICO_SOCIAL"></table>
 
 <script>
-/* ======================================================
-   FUNÇÃO PARA ESCAPAR HTML
-====================================================== */
+// ----------------------------
+// Função para converter Date()
+// ----------------------------
+function parseGoogleDate(value) {
+  if (typeof value !== "string") return value;
+
+  const d = value.match(/Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)/);
+  if (!d) return value;
+
+  const ano = Number(d[1]);
+  const mes = Number(d[2]);
+  const dia = Number(d[3]);
+  const hora = Number(d[4] ?? 0);
+  const min = Number(d[5] ?? 0);
+
+  // CORRIGE:
+  // Se for Date(1899...), então é só hora
+  if (ano === 1899) {
+    return `${String(hora).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  }
+
+  // Se for data real
+  return `${String(dia).padStart(2, "0")}/${String(mes + 1).padStart(2, "0")}/${ano}`;
+}
+
+// ----------------------------
+// Funciona também para hora isolada
+// ----------------------------
+function formatHoraSeNecessario(value) {
+  if (typeof value !== "string") return value;
+
+  const d = value.match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+  if (!d) return value;
+
+  const h = String(Number(d[4])).padStart(2, "0");
+  const m = String(Number(d[5])).padStart(2, "0");
+
+  return `${h}:${m}`;
+}
+
+// ----------------------------
+// Escape HTML contra quebras de layout
+// ----------------------------
 function escapeHtml(text) {
-  if (typeof text !== "string") return text;
+  if (!text) return text;
   return text
-    .replace(/&/g, "&amp;")
+    .toString()
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
 
-/* ======================================================
-   FORMATAÇÃO DE CELULAS: DATA / HORA
-====================================================== */
-function formatCell(value, somenteHora = false) {
-  if (typeof value === "string" && value.startsWith("Date(")) {
-    const partes = value.match(/Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)/);
+// ----------------------------
+// Carregar dados JSON
+// ----------------------------
+async function loadData() {
+  try {
+    const resp = await fetch("./dados.json?nocache=" + Date.now());
+    const data = await resp.json();
 
-    if (partes) {
-      const ano = Number(partes[1]);
-      const mes = Number(partes[2]) + 1;
-      const dia = Number(partes[3]);
-      const hora = Number(partes[4] || 0);
-      const min = Number(partes[5] || 0);
+    renderTable("PAINEL", data["PAINEL"]);
+    renderTable("AGENDA_DO_DIA", data["AGENDA DO DIA"]);
+    renderTable("AGENDA_SERVICO_SOCIAL", data["AGENDA SERVIÇO SOCIAL"]);
 
-      if (somenteHora) {
-        return String(hora).padStart(2, "0") + ":" + String(min).padStart(2, "0");
-      }
-
-      return (
-        String(dia).padStart(2, "0") + "/" +
-        String(mes).padStart(2, "0") + "/" +
-        ano
-      );
-    }
+  } catch (e) {
+    console.error("Erro ao carregar dados.json:", e);
   }
-
-  return value;
 }
 
-/* ======================================================
-   RENDERIZA A TABELA
-====================================================== */
-function renderSheet(sheetName, data) {
-  const conteudo = document.getElementById("conteudo");
-  let html = `<h3>${sheetName}</h3><table>`;
+// ----------------------------
+// Renderizar em tabela HTML
+// ----------------------------
+function renderTable(id, dataset) {
+  const table = document.getElementById(id);
+  if (!dataset) {
+    table.innerHTML = "<tr><td>Sem dados</td></tr>";
+    return;
+  }
 
-  const cols = data[0];
-  html += "<tr>";
-  cols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+  let html = "<tr>";
+  dataset.cols.forEach(c => {
+    html += `<th>${escapeHtml(c)}</th>`;
+  });
   html += "</tr>";
 
-  data.slice(1).forEach(r => {
-    const linhaTexto = r.join(" ").toLowerCase();
-    const classeCancelado = linhaTexto.includes("cancelado") ? "cancelado" : "";
+  dataset.rows.forEach(row => {
+    const textoLinha = row.map(v => ("" + v).toLowerCase()).join(" ");
+    const isCancelado = textoLinha.includes("cancelado");
 
-    html += `<tr class="${classeCancelado}">`;
+    html += `<tr class="${isCancelado ? "cancelado" : ""}">`;
 
-    r.forEach((cell, idx) => {
+    row.forEach((cell, index) => {
+      const colName = dataset.cols[index].toLowerCase();
+      let val = cell;
+
+      // Detecta CAMPOS DE HORA
       const somenteHora =
-        ((sheetName === "AGENDA DO DIA" || sheetName === "PAINEL") &&
-         cols[idx].toLowerCase().includes("hora"));
+        colName.includes("hora") &&
+        (id === "PAINEL" || id === "AGENDA_DO_DIA" || id === "AGENDA_SERVICO_SOCIAL");
 
-      const valor = formatCell(cell, somenteHora);
-      html += `<td>${escapeHtml(valor)}</td>`;
+      if (somenteHora) {
+        val = formatHoraSeNecessario(cell);
+      } else {
+        val = parseGoogleDate(cell);
+      }
+
+      html += `<td>${escapeHtml(val)}</td>`;
     });
 
     html += "</tr>";
   });
 
-  html += "</table>";
-  conteudo.innerHTML += html;
+  table.innerHTML = html;
 }
 
-/* ======================================================
-   CARREGAMENTO SIMULADO (substitua pelo fetch real)
-====================================================== */
-async function carregar() {
-  document.getElementById("titulo").innerText = "Carregando dados da planilha...";
-
-  /* Aqui você usa fetch() na sua API real.
-     Vou deixar um exemplo de estrutura: */
-
-  const SHEET_ID = "1Ch3AjQ0MDo4WuQWFDR3r8nZrHb4yQkSLOtT5_QgxT6E";
-
-  const resposta = await fetch("dados.json");
-  const planilhas = await resposta.json();
-
-  document.getElementById("titulo").innerText = "Visualização da Planilha";
-
-  Object.keys(planilhas).forEach(sheetName => {
-    renderSheet(sheetName, planilhas[sheetName]);
-  });
-}
-
-carregar();
+// ----------------------------
+loadData();
+// ----------------------------
 </script>
-
 </body>
 </html>
